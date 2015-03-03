@@ -14,6 +14,7 @@ message ExecutionRequest {
   repeated string args = 1;
   repeated Env env = 2;
   bytes stdin = 3;
+  string dir = 4;
 }
 
 message ExecutionResponse {

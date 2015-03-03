@@ -1,12 +1,14 @@
-package main
+package main // https://megrim.uk/app.html?token=1425326953d6e0182006184937838bf8ca7b82de31
 
 import (
 	"bytes"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -15,6 +17,55 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
+
+type RemoteCmd struct {
+	//*pb.ExecutionRequest
+	Args []string
+	Env  []string
+	Dir  string
+
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+func (self *RemoteCmd) Run(c pb.BuilderClient) error {
+	var req pb.ExecutionRequest
+	req.Args = self.Args
+	req.Dir = self.Dir
+
+	if self.Stdin != nil {
+		req.Stdin, _ = ioutil.ReadAll(self.Stdin)
+	}
+
+	for _, kv := range self.Env {
+		pair := strings.SplitN(kv, "=", 1)
+		req.Env = append(req.Env, &pb.ExecutionRequest_Env{Key: pair[0], Value: pair[1]})
+	}
+
+	r, err := c.Execute(context.Background(), &req)
+	if err != nil {
+		return err
+	}
+
+	resp, err := r.Recv()
+	if err != nil {
+		return err
+	}
+
+	if self.Stdout != nil {
+		if _, err := self.Stdout.Write(resp.Stdout); err != nil {
+			return err
+		}
+	}
+
+	if self.Stderr != nil {
+		if _, err := self.Stderr.Write(resp.Stderr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func main() {
 	flag.Parse()
@@ -26,8 +77,16 @@ func main() {
 	}
 	defer conn.Close()
 
+	var buf bytes.Buffer
 	c := pb.NewBuilderClient(conn)
-	r, err := c.Execute(context.Background(), &pb.ExecutionRequest{Args: []string{"ls", "-lhsa"}})
+
+	cmd := new(RemoteCmd)
+	cmd.Args = []string{"echo", "Hello"}
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	cmd.Run(c)
+	fmt.Println(buf.String())
+	/*r, err := c.Execute(context.Background(), &pb.ExecutionRequest{Args: []string{"ls", "-lhsa"}})
 	fmt.Println(r, err)
 
 	for {
@@ -39,8 +98,9 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println(string(resp.Stdout), resp.GetStatus())
-	}
+		fmt.Println(string(resp.Stdout))
+		pretty.Println(resp.GetStatus())
+	}*/
 
 	return
 }
@@ -53,6 +113,7 @@ func (self *server) Execute(req *pb.ExecutionRequest, resp pb.Builder_ExecuteSer
 	cmd := exec.Command(req.Args[0], req.Args[1:]...)
 	cmd.Env = convertEnv(req.GetEnv())
 	cmd.Stdin = bytes.NewReader(req.Stdin)
+	cmd.Dir = req.Dir
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {

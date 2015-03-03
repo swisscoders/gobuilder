@@ -32,6 +32,7 @@ type ExecutionRequest struct {
 	Args  []string                `protobuf:"bytes,1,rep,name=args" json:"args,omitempty"`
 	Env   []*ExecutionRequest_Env `protobuf:"bytes,2,rep,name=env" json:"env,omitempty"`
 	Stdin []byte                  `protobuf:"bytes,3,opt,name=stdin,proto3" json:"stdin,omitempty"`
+	Dir   string                  `protobuf:"bytes,4,opt,name=dir" json:"dir,omitempty"`
 }
 
 func (m *ExecutionRequest) Reset()         { *m = ExecutionRequest{} }
