@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package proto;
+
+service Builder {
+  rpc Execute(ExecutionRequest) returns (stream ExecutionResponse) {}
+}
+
+message ExecutionRequest {
+  message Env {
+    string key = 1;
+    string value = 2;
+  }
+  repeated string args = 1;
+  repeated Env env = 2;
+  bytes stdin = 3;
+}
+
+message ExecutionResponse {
+  message Status {
+    bool core_dump = 1;
+    bool exited = 2;
+    int32 exit_status = 3;
+    bool signaled = 4;
+    int32 signal = 5;
+  }
+  Status status = 1;
+  bytes stdout = 2;
+  bytes stderr = 3;
+}
