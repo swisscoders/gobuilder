@@ -1,4 +1,4 @@
-package main // https://megrim.uk/app.html?token=1425326953d6e0182006184937838bf8ca7b82de31
+package main
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -24,16 +25,90 @@ type RemoteCmd struct {
 	Env  []string
 	Dir  string
 
+	Status *pb.ExecutionResponse_Status
+
 	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
+
+	closeAfterExecute []io.Closer
+}
+
+func (self *RemoteCmd) StdinPipe() (io.WriteCloser, error) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	self.Stdin = r
+	return w, nil
+}
+
+func (self *RemoteCmd) StdoutPipe() (io.Reader, error) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	self.Stdout = w
+	self.closeAfterExecute = append(self.closeAfterExecute, w)
+	return r, nil
+}
+
+func (self *RemoteCmd) StderrPipe() (io.Reader, error) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	self.Stderr = w
+	self.closeAfterExecute = append(self.closeAfterExecute, w)
+	return r, nil
+}
+
+func (self *RemoteCmd) setupFds() error {
+	if self.Stdin == nil {
+		f, err := os.Open(os.DevNull)
+		if err != nil {
+			return err
+		}
+		self.Stdin = f
+		self.closeAfterExecute = append(self.closeAfterExecute, f)
+	}
+
+	if self.Stdout == nil {
+		f, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+		if err != nil {
+			return err
+		}
+		self.Stdout = f
+		self.closeAfterExecute = append(self.closeAfterExecute, f)
+	}
+
+	if self.Stderr == nil {
+		f, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+		if err != nil {
+			return err
+		}
+		self.Stderr = f
+		self.closeAfterExecute = append(self.closeAfterExecute, f)
+	}
+	return nil
+}
+
+func (self *RemoteCmd) closeAll(fds []io.Closer) {
+	for _, fd := range fds {
+		fd.Close()
+	}
 }
 
 func (self *RemoteCmd) Run(c pb.BuilderClient) error {
-	var req pb.ExecutionRequest
-	req.Args = self.Args
-	req.Dir = self.Dir
+	var req = &pb.ExecutionRequest{
+		Args: self.Args,
+		Dir:  self.Dir,
+	}
 
+	self.setupFds()
+	defer self.closeAll(self.closeAfterExecute)
+
+	// TODO(rn): Support streaming stdin
 	if self.Stdin != nil {
 		req.Stdin, _ = ioutil.ReadAll(self.Stdin)
 	}
@@ -43,26 +118,37 @@ func (self *RemoteCmd) Run(c pb.BuilderClient) error {
 		req.Env = append(req.Env, &pb.ExecutionRequest_Env{Key: pair[0], Value: pair[1]})
 	}
 
-	r, err := c.Execute(context.Background(), &req)
+	r, err := c.Execute(context.Background(), req)
 	if err != nil {
 		return err
 	}
 
-	resp, err := r.Recv()
-	if err != nil {
-		return err
-	}
-
-	if self.Stdout != nil {
-		if _, err := self.Stdout.Write(resp.Stdout); err != nil {
+	for {
+		resp, err := r.Recv()
+		if err != nil {
 			return err
 		}
-	}
 
-	if self.Stderr != nil {
-		if _, err := self.Stderr.Write(resp.Stderr); err != nil {
-			return err
+		if resp.Status != nil {
+			self.Status = resp.Status
 		}
+
+		if resp.Stdout != nil {
+			if _, err := self.Stdout.Write(resp.Stdout); err != nil {
+				return err
+			}
+		}
+
+		if resp.Stderr != nil {
+			if _, err := self.Stderr.Write(resp.Stderr); err != nil {
+				return err
+			}
+		}
+
+		if err == io.EOF {
+			return nil
+		}
+
 	}
 	return nil
 }
@@ -81,7 +167,7 @@ func main() {
 	c := pb.NewBuilderClient(conn)
 
 	cmd := new(RemoteCmd)
-	cmd.Args = []string{"echo", "Hello"}
+	cmd.Args = []string{"ls", "-lhsa"}
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
 	cmd.Run(c)
