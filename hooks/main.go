@@ -34,22 +34,14 @@ var gitRepoPath = flag.String("path", "", "full path to the git repository")
 func main() {
 	flag.Parse()
 
-	var req *pb.ChangeRequest
-	var err error
-
-	if *local {
-		req, err = createChangeRequestFromPostCommit()
-
-		if *gitRepoPath != "" {
-			req.Repo = *gitRepoPath
-		}
-	} else {
-		req, err = createChangeRequestFromPostReceive(*gitRepoPath)
-	}
-
+	req, ignore, err := createChangeRequest(*gitRepoPath)
 	if err != nil {
 		glog.Errorf("Unable to create the post commit request: %s", err)
 		os.Exit(1)
+	}
+
+	if ignore {
+		return
 	}
 
 	conn, err := grpc.Dial(*address)
@@ -67,7 +59,7 @@ func main() {
 	glog.Infof("Notified the master (at %s) successfully", *address)
 }
 
-func createChangeRequestFromPostReceive(bareRepoPath string) (req *pb.ChangeRequest, err error) {
+func createChangeRequest(bareRepoPath string) (req *pb.ChangeRequest, ignore bool, err error) {
 	req = new(pb.ChangeRequest)
 
 	// Read the post-receive information from stdin
@@ -82,8 +74,10 @@ func createChangeRequestFromPostReceive(bareRepoPath string) (req *pb.ChangeRequ
 		return
 	}
 
-	req.Branch, err = g.Branch()
-	if err != nil {
+	// branch is optional (there could be tags later)
+	req.Branch, _ = g.Branch()
+	if req.Branch == "" {
+		ignore = true
 		return
 	}
 
@@ -113,8 +107,6 @@ func (self *GitPostReceive) Parse(r io.Reader) error {
 		return err
 	}
 
-	fmt.Println("Got: " + string(updateInfo))
-
 	line := strings.SplitN(strings.TrimSpace(string(updateInfo)), " ", 3)
 	if len(line) != 3 {
 		return fmt.Errorf("Expected to extract old hash, new hash and branch. Got: %#v\n", line)
@@ -122,8 +114,13 @@ func (self *GitPostReceive) Parse(r io.Reader) error {
 
 	self.oldCommitHash = strings.TrimSpace(line[0])
 	self.newCommitHash = strings.TrimSpace(line[1])
-	self.branch = strings.TrimPrefix(line[2], "refs/heads/")
 
+	// We ignore everything else than branch information:
+	if !strings.HasPrefix(line[2], "refs/heads") {
+		return nil
+	}
+
+	self.branch = strings.TrimPrefix(line[2], "refs/heads/")
 	return nil
 }
 
@@ -150,58 +147,6 @@ func (self *GitPostReceive) Files() (files []string, err error) {
 	}
 
 	return strings.Split(strings.TrimSpace(output), "\n"), nil
-}
-
-func createChangeRequestFromPostCommit() (req *pb.ChangeRequest, err error) {
-	req = new(pb.ChangeRequest)
-	g := new(GitPostCommit)
-
-	req.Commithash, err = g.Revision()
-	if err != nil {
-		return
-	}
-
-	req.Branch, err = g.Branch()
-	if err != nil {
-		return
-	}
-
-	req.Files, err = g.Files()
-	if err != nil {
-		return
-	}
-
-	req.Repo, err = g.Directory()
-	if err != nil {
-		return
-	}
-	return
-}
-
-type GitPostCommit struct{}
-
-func (self *GitPostCommit) Revision() (hash string, err error) {
-	output, err := executeGit("rev-parse", "HEAD")
-	return strings.TrimSpace(output), err
-}
-
-func (self *GitPostCommit) Branch() (branch string, err error) {
-	output, err := executeGit("rev-parse", "--symbolic", "--abbrev-ref", "HEAD")
-	return strings.TrimSpace(output), err
-}
-
-func (self *GitPostCommit) Files() (files []string, err error) {
-	output, err := executeGit("diff-index", "HEAD^1", "--name-only")
-	if err != nil {
-		return
-	}
-
-	return strings.Split(strings.TrimSpace(output), "\n"), nil
-}
-
-func (self *GitPostCommit) Directory() (dirname string, err error) {
-	output, err := executeGit("rev-parse", "--show-toplevel")
-	return strings.TrimSpace(output), err
 }
 
 func executeGit(args ...string) (out string, err error) {
