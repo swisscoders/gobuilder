@@ -50,8 +50,11 @@ func (self *server) Execute(req *pb.ExecutionRequest, resp pb.Builder_ExecuteSer
 		return err
 	}
 
+    if err = cmd.Start(); err != nil {
+        return err
+    }
 	streamReader(stdoutPipe, stderrPipe, resp)
-	err = cmd.Run()
+	err = cmd.Wait()
 
 	var status syscall.WaitStatus
 	if err != nil {
@@ -75,7 +78,8 @@ func (self *server) Execute(req *pb.ExecutionRequest, resp pb.Builder_ExecuteSer
 }
 
 func streamReader(stdout io.ReadCloser, stderr io.ReadCloser, resp pb.Builder_ExecuteServer) {
-	readerFn := func(in io.Reader) <-chan []byte {
+	var wg sync.WaitGroup
+	readerFn := func(wg *sync.WaitGroup, in io.Reader) <-chan []byte {
 		out := make(chan []byte)
 		go func() {
 			for {
@@ -88,48 +92,32 @@ func streamReader(stdout io.ReadCloser, stderr io.ReadCloser, resp pb.Builder_Ex
 				}
 				out <- output
 				if err == io.EOF {
-					close(out)
+					wg.Done()
 					break
 				}
 			}
 		}()
 		return out
 	}
+	wg.Add(2)
+	stderrin := readerFn(&wg, stderr)
+	stdoutin := readerFn(&wg, stdout)
+
+	stop := make(chan struct{})
 	go func() {
-		stderrin := readerFn(stderr)
-		stdoutin := readerFn(stdout)
-
-		var stderrOnce sync.Once
-		var stdoutOnce sync.Once
-
-		var wg sync.WaitGroup
-		wg.Add(2)
-		stop := make(chan struct{})
-		go func() {
-			wg.Wait()
-			stop <- struct{}{}
-		}()
-		for {
-			select {
-			case d, ok := <-stderrin:
-				//fmt.Println("stderr", ok)
-				if !ok {
-					stderrOnce.Do(wg.Done)
-					continue
-				}
-				resp.Send(&pb.ExecutionResponse{Stderr: d})
-			case d, ok := <-stdoutin:
-				//fmt.Println("stdout", ok)
-				if !ok {
-					stdoutOnce.Do(wg.Done)
-					continue
-				}
-				resp.Send(&pb.ExecutionResponse{Stdout: d})
-			case <-stop:
-				break
-			}
-		}
+		wg.Wait()
+		stop <- struct{}{}
 	}()
+	for {
+		select {
+		case d := <-stderrin:
+			resp.Send(&pb.ExecutionResponse{Stderr: d})
+		case d := <-stdoutin:
+			resp.Send(&pb.ExecutionResponse{Stdout: d})
+		case <-stop:
+		    return
+		}
+	}
 }
 
 func convertEnv(env []*pb.ExecutionRequest_Env) (newEnv []string) {
