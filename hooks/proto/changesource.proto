@@ -10,7 +10,7 @@ message ChangeRequest {
     string commithash = 1;
     string branch = 2;
     
-    string dir = 3;
+    string repo = 3;
     repeated string files = 4;
 }
 

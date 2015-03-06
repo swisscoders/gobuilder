@@ -59,6 +59,6 @@ type server struct{}
 
 func (self *server) Notify(ctx context.Context, req *pbhooks.ChangeRequest) (*pbhooks.ChangeResponse, error) {
 	fmt.Println(req)
-	executeCommand(req.Dir, "git", "status")
+	// executeCommand(req.Dir, "git", "status")
 	return &pbhooks.ChangeResponse{}, nil
 }
