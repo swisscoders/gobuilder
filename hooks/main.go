@@ -4,11 +4,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"os"
-	"os/exec"
-	"strings"
+
+	"./git"
 
 	pb "./proto"
 	"github.com/golang/glog"
@@ -25,6 +23,29 @@ echo $(git diff-index HEAD^1 --name-only)
 bare post-receive:
 git diff --name-only 2684f4499fc90bf92382dd0569d22e4300dfb1f2 12ca53c375a030b81c796b12a6c83dfe4ad95782
 bab28f2c50267bbfda0c3ec93d5b1f19cc3a943d 2684f4499fc90bf92382dd0569d22e4300dfb1f2 refs/heads/master
+
+=======================
+Push + branch creation:
+3d976f56eb5d8c419c7b7263855fa218a8d93683 43a70237d6d7ed51e920e792dc83f60b0c4eb52e refs/heads/master
+0000000000000000000000000000000000000000 43a70237d6d7ed51e920e792dc83f60b0c4eb52e refs/heads/foobar
+=======
+Push + tags creation:
+b28f2c50267bbfda0c3ec93d5b1f19cc3a943d 2684f4499fc90bf92382dd0569d22e4300dfb1f2 refs/heads/master
+0000000000000000000000000000000000000000 3756c13a37bb8307eafa7a7212b9d5317e49667b refs/tags/v0.100
+0000000000000000000000000000000000000000 c376faf8d6350d265d490b59bc860fb69d0645f6 refs/tags/v0.101
+
+=======
+git rev-list f25367f7692e3a2f3e1abed44597c8ceb3a9e218...
+a74dbfea4d9daf37e39b23181d19020538e6f9ba
+57d6a4e06956fdc3e23e2684a2fd43e1c0b58445
+5065a57740dfc7ca06479aa1f6521763b0793636
+
+then we need to:
+git diff --name-only 5065a57740dfc7ca06479aa1f6521763b0793636 57d6a4e06956fdc3e23e2684a2fd43e1c0b58445
+git diff --name-only 57d6a4e06956fdc3e23e2684a2fd43e1c0b58445 a74dbfea4d9daf37e39b23181d19020538e6f9ba
+git diff --name-only a74dbfea4d9daf37e39b23181d19020538e6f9ba f25367f7692e3a2f3e1abed44597c8ceb3a9e218
+
+and send each commit via RPC with the appropriate fields filled in.
 */
 
 var address = flag.String("address", "localhost:50052", "address of the master")
@@ -59,11 +80,13 @@ func main() {
 	glog.Infof("Notified the master (at %s) successfully", *address)
 }
 
+const emptyCommitHash = "0000000000000000000000000000000000000000"
+
 func createChangeRequest(bareRepoPath string) (req *pb.ChangeRequest, ignore bool, err error) {
 	req = new(pb.ChangeRequest)
 
 	// Read the post-receive information from stdin
-	g := new(GitPostReceive)
+	g := new(git.PostReceive)
 	err = g.Parse(os.Stdin)
 	if err != nil {
 		return
@@ -93,71 +116,4 @@ func createChangeRequest(bareRepoPath string) (req *pb.ChangeRequest, ignore boo
 	}
 
 	return
-}
-
-type GitPostReceive struct {
-	branch        string
-	oldCommitHash string
-	newCommitHash string
-}
-
-func (self *GitPostReceive) Parse(r io.Reader) error {
-	updateInfo, err := ioutil.ReadAll(r)
-	if err != nil {
-		return err
-	}
-
-	line := strings.SplitN(strings.TrimSpace(string(updateInfo)), " ", 3)
-	if len(line) != 3 {
-		return fmt.Errorf("Expected to extract old hash, new hash and branch. Got: %#v\n", line)
-	}
-
-	self.oldCommitHash = strings.TrimSpace(line[0])
-	self.newCommitHash = strings.TrimSpace(line[1])
-
-	// We ignore everything else than branch information:
-	if !strings.HasPrefix(line[2], "refs/heads") {
-		return nil
-	}
-
-	self.branch = strings.TrimPrefix(line[2], "refs/heads/")
-	return nil
-}
-
-func (self *GitPostReceive) Revision() (string, error) {
-	if self.newCommitHash == "" {
-		return "", fmt.Errorf("Commit Hash is empty")
-	}
-
-	return self.newCommitHash, nil
-}
-
-func (self *GitPostReceive) Branch() (string, error) {
-	if self.branch == "" {
-		return "", fmt.Errorf("Branch is empty")
-	}
-
-	return self.branch, nil
-}
-
-func (self *GitPostReceive) Files() (files []string, err error) {
-	output, err := executeGit("diff", "--name-only", self.oldCommitHash, self.newCommitHash)
-	if err != nil {
-		return
-	}
-
-	return strings.Split(strings.TrimSpace(output), "\n"), nil
-}
-
-func executeGit(args ...string) (out string, err error) {
-	cmd := exec.Command("git", args...)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		glog.Errorf("Command exited with failure: %s\n%s", err, string(output))
-	} else {
-		glog.V(1).Infof("Command exited successfully: %s", string(output))
-	}
-
-	return string(output), err
 }
