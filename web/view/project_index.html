@@ -1,0 +1,32 @@
+[[define "project/index"]]
+[[template "header" .]]
+<h1 class="page-header">Overview</h1>
+<h2 class="sub-header">Latest builds</h2>
+
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Repository</th>
+        <th>Description</th>
+        <th>Latest build at</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      [[range $item := .Content]]
+      <tr>
+        <td>#43</td>
+        <td>[[$item.Key]]</td>
+        <td>[[$item.Description]]</td>
+        <td>[[$item.LatestBuildAt]]</td>
+        <td>[[$item.Status]]</td>
+      </tr>
+      [[end]]
+    </tbody>
+  </table>
+</div>
+          
+[[template "footer"]]
+[[end]]

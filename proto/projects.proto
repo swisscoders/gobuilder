@@ -1,0 +1,76 @@
+syntax = "proto2";
+
+package proto;
+
+message GoBuilder {
+    repeated Project project = 1;    
+    repeated Slave slave = 2;
+}
+
+message Slave {
+    required string name = 1;
+    required string address = 2;
+    repeated string tag = 3;
+}
+
+// Describes a project
+message Project {
+    // Name of the project (used for display and identification)
+    required string name = 1;
+    
+    // A source associated with this project (for example: SourceNotifier)
+    required Source source = 2;
+
+    // Blueprints for this project
+    repeated Blueprint blueprint = 3;
+    repeated Scheduler scheduler = 4;
+    repeated Builder builder = 5;
+}
+
+message Source {
+    extensions 100 to max;
+}
+
+// A blueprint associates build steps with a name
+message Blueprint {
+    // Name of the blueprint (needs to be unique within a project)
+    required string name = 1;
+    
+    // List of steps to execute (in order) for this blueprint
+    repeated Step step = 2;
+}
+
+message Step {
+    // Command arguments as provided to execve(2)
+    repeated string argv = 1;
+    repeated string env = 2;
+}
+
+message SourceNotifier {
+    extend Source {
+        optional SourceNotifier source = 100;
+    } 
+    optional string address = 1;
+}
+
+message Scheduler {
+    repeated string builder = 1;
+    
+    extensions 100 to max;    
+}
+
+// Builder is a control unit to run a blueprint on configured slaves
+message Builder {
+    required string name = 1;
+    required string blueprint = 2;
+    repeated string slave = 3;
+}
+
+message PeriodicScheduler {
+    extend Scheduler {
+        optional PeriodicScheduler scheduler = 100;
+    }
+    
+    // interval in seconds
+    required int32 interval = 1;
+}

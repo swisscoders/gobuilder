@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+import "changesource.proto";
+
+package proto;
+
+service Builder {
+  // Sets the build environment up
+  rpc Setup(SetupRequest) returns (SetupResponse) {}
+  
+  // Executes a command
+  rpc Execute(ExecutionRequest) returns (stream ExecutionResponse) {}
+  
+  // Tears the build environment down
+  rpc Teardown(TeardownRequest) returns (TeardownResponse) {}
+}
+
+message SetupRequest {
+}
+
+message SetupResponse {
+  BuildEnv env = 1;
+}
+
+message BuildEnv {
+  string path = 1;
+  
+  // Contains the signature only known to the slave who created it
+  // If it fails to validate request will be denied
+  // Signature is calculated with this field set empty
+  bytes sig = 2;
+}
+
+message TeardownRequest {
+  BuildEnv env = 1;
+}
+
+message TeardownResponse {
+}
+
+message ExecutionRequest {
+  message Env {
+    string key = 1;
+    string value = 2;
+  }
+  repeated string args = 1;
+  repeated Env env = 2;
+  bytes stdin = 3;
+  
+  BuildEnv build_env = 4;
+}
+
+message ExecutionResponse {
+  Status status = 1;
+  bytes stdout = 2;
+  bytes stderr = 3;
+}
+
+message Status {
+    bool core_dump = 1;
+    bool exited = 2;
+    int32 exit_status = 3;
+    bool signaled = 4;
+    int32 signal = 5;
+}
+
+message MetaResult {
+  string just_a_filler = 1;
+}
+
+message BuildResult {
+  int64 duration = 1;
+  Status status = 2;
+  ChangeRequest change_request = 3;
+}

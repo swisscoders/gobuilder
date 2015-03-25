@@ -1,0 +1,27 @@
+[[define "project/new"]]
+[[template "header" .]]
+<h1 class="page-header">New Project</h1>
+
+<div class="container">
+  <form role="form" action="/project/new" method="post">
+    
+    <div class="form-group">
+      <label for="name">Project Key:</label>
+      <input type="text" class="form-control" id="name" name="key" placeholder="Enter a project key">
+      &nbsp;<i>(allowed characters are a-zA-Z0-9_-)</i>
+    </div>
+    <div class="form-group">
+      <label for="desc">Description:</label>
+      <input type="text" class="form-control" id="desc" name="desc" placeholder="Enter a short description">
+    </div>
+    <div class="form-group">
+      <label for="repo">Repository path:</label>
+      <input type="text" class="form-control" id="repo" name="repo" placeholder="Enter the path of the repository">
+    </div>
+
+    <button type="submit" class="btn btn-primary">Create</button>
+  </form>
+</div>
+          
+[[template "footer"]]
+[[end]]

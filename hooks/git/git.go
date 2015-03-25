@@ -19,22 +19,22 @@ type Commit struct {
 	Files []string
 }
 
-type DiffLine struct {
+type PostReceiveLine struct {
 	OldCommitHash string
 	NewCommitHash string
 
 	Ref string
 }
 
-func (self *DiffLine) IsTag() bool {
+func (self *PostReceiveLine) IsTag() bool {
 	return strings.HasPrefix(self.Ref, "refs/tags/")
 }
 
-func (self *DiffLine) IsBranch() bool {
+func (self *PostReceiveLine) IsBranch() bool {
 	return strings.HasPrefix(self.Ref, "refs/heads/")
 }
 
-func (self *DiffLine) RefName() string {
+func (self *PostReceiveLine) RefName() string {
 	parts := strings.Split(self.Ref, "/")
 	if len(parts) < 1 {
 		return ""
@@ -43,12 +43,16 @@ func (self *DiffLine) RefName() string {
 	return parts[len(parts)-1]
 }
 
-// ParseDiff parses the output of: git diff --name-only 2684f4499fc90bf92382dd0569d22e4300dfb1f2 12ca53c375a030b81c796b12a6c83dfe4ad95782
 // Sample: bab28f2c50267bbfda0c3ec93d5b1f19cc3a943d 2684f4499fc90bf92382dd0569d22e4300dfb1f2 refs/heads/master
-func ParseDiff(r io.Reader) (lines []*DiffLine) {
+func ParsePostReceiveLine(r io.Reader) (lines []*PostReceiveLine) {
 	readEachLine(r, func(line string) {
+		fmt.Println("Got: " + line)
 		item := splitLine(line)
-		lines = append(lines, &DiffLine{OldCommitHash: replaceEmptyHash(item[0]), NewCommitHash: replaceEmptyHash(item[1]), Ref: item[2]})
+		if len(item) < 3 {
+			return
+		}
+
+		lines = append(lines, &PostReceiveLine{OldCommitHash: replaceEmptyHash(item[0]), NewCommitHash: replaceEmptyHash(item[1]), Ref: item[2]})
 	})
 	return
 }
@@ -70,23 +74,13 @@ func ParseRevList(latestCommitHash string, r io.Reader) (pairs []*RevListCommitP
 		return
 	}
 
-	previousHash := hashes[0]
-	for _, hash := range hashes[1:] {
+	previousHash := latestCommitHash //hashes[0]
+	for _, hash := range hashes {
 		pairs = append(pairs, &RevListCommitPair{OldCommitHash: previousHash, NewCommitHash: hash})
 		previousHash = hash
 	}
-	pairs = append(pairs, &RevListCommitPair{OldCommitHash: previousHash, NewCommitHash: latestCommitHash})
+	//pairs = append(pairs, &RevListCommitPair{OldCommitHash: previousHash, NewCommitHash: latestCommitHash})
 
-	return
-}
-
-// ArgsFromRevListPairs is a helper and parses the RevListCommitPairs and returns:
-// diff --name-only OldCommitHash NewCommitHash
-// without the "git".
-func ArgsFromRevListPairs(pairs []*RevListCommitPair) (argsList [][]string) {
-	for _, pair := range pairs {
-		argsList = append(argsList, []string{"diff", "--name-only", pair.OldCommitHash, pair.NewCommitHash})
-	}
 	return
 }
 
@@ -119,26 +113,12 @@ type PostReceive struct {
 }
 
 func (self *PostReceive) Parse(r io.Reader) error {
-	updateInfo, err := ioutil.ReadAll(r)
+	input, err := ioutil.ReadAll(r)
 	if err != nil {
 		return err
 	}
-	fmt.Println("Got: " + string(updateInfo))
+	fmt.Println("Got: " + string(input))
 
-	line := strings.SplitN(strings.TrimSpace(string(updateInfo)), " ", 3)
-	if len(line) != 3 {
-		return fmt.Errorf("Expected to extract old hash, new hash and branch. Got: %#v\n", line)
-	}
-
-	self.oldCommitHash = strings.TrimSpace(line[0])
-	self.newCommitHash = strings.TrimSpace(line[1])
-
-	// We ignore everything else than branch information:
-	if !strings.HasPrefix(line[2], "refs/heads") {
-		return nil
-	}
-
-	self.branch = strings.TrimPrefix(line[2], "refs/heads/")
 	return nil
 }
 
@@ -159,7 +139,7 @@ func (self *PostReceive) Branch() (string, error) {
 }
 
 func (self *PostReceive) Files() (files []string, err error) {
-	output, err := executeGit("diff", "--name-only", self.oldCommitHash, self.newCommitHash)
+	output, err := Execute("diff", "--name-only", self.oldCommitHash, self.newCommitHash)
 	if err != nil {
 		return
 	}
@@ -167,7 +147,7 @@ func (self *PostReceive) Files() (files []string, err error) {
 	return strings.Split(strings.TrimSpace(output), "\n"), nil
 }
 
-func executeGit(args ...string) (out string, err error) {
+func Execute(args ...string) (out string, err error) {
 	cmd := exec.Command("git", args...)
 
 	output, err := cmd.CombinedOutput()

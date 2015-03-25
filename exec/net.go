@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	pb "../proto"
+	//pbhooks "../hooks/proto"
 	"golang.org/x/net/context"
 )
 
@@ -14,9 +15,10 @@ type RemoteCmd struct {
 	//*pb.ExecutionRequest
 	Args []string
 	Env  []string
-	Dir  string
 
-	Status *pb.ExecutionResponse_Status
+	BuildEnv *pb.BuildEnv
+
+	Status *pb.Status
 
 	Stdin  io.Reader
 	Stdout io.Writer
@@ -90,10 +92,23 @@ func (self *RemoteCmd) closeAll(fds []io.Closer) {
 	}
 }
 
+func (self *RemoteCmd) Setup(c pb.BuilderClient) (*pb.BuildEnv, error) {
+	resp, err := c.Setup(context.Background(), &pb.SetupRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Env, nil
+}
+
+func (self *RemoteCmd) Teardown(c pb.BuilderClient, env *pb.BuildEnv) error {
+	_, err := c.Teardown(context.Background(), &pb.TeardownRequest{Env: env})
+	return err
+}
+
 func (self *RemoteCmd) Run(c pb.BuilderClient) error {
 	var req = &pb.ExecutionRequest{
-		Args: self.Args,
-		Dir:  self.Dir,
+		Args:     self.Args,
+		BuildEnv: self.BuildEnv,
 	}
 
 	self.setupFds()

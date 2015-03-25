@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package proto;
+
+message ChangeRequest {
+    // Repo type denoting the underlying repo type
+    enum RepoType {
+        UNKNOWN = 0;
+        GIT = 1;
+    }
+    RepoType repo_type = 6;
+    
+    // String identifying the project in the master
+    string project = 1;
+    // Opaque string identifying this repo (used on the builder to clone/checkout the repo)
+    string repo = 2;
+    
+    // Opaque identifier for a single commit (repo specific)
+    string commit = 3;
+    // Which branch this commit applies to
+    string branch = 4;
+    // List of modified paths within the commit
+    repeated string files = 5;
+}
+
+message ChangeResponse {
+}
+
+// Service implementing a change source
+service ChangeSource {
+    rpc Notify(ChangeRequest) returns (ChangeResponse);  
+}
