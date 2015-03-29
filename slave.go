@@ -194,13 +194,13 @@ func streamReader(stdout io.ReadCloser, stderr io.ReadCloser, resp pb.Builder_Ex
 		go func() {
 			for {
 				output := make([]byte, 4096)
-				_, err := in.Read(output)
+				n, err := in.Read(output)
 				if err != nil && err != io.EOF {
 					// TODO(rn): Hand error to caller
 					glog.Errorf("Failed to read input: %s", err)
 					break
 				}
-				out <- output
+				out <- output[:n]
 				if err == io.EOF {
 					wg.Done()
 					break

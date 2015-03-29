@@ -19,6 +19,8 @@ It has these top-level messages:
 	Status
 	MetaResult
 	BuildResult
+	GetResultResponse
+	GetResultRequest
 */
 package proto
 
@@ -187,6 +189,32 @@ func (m *BuildResult) GetChangeRequest() *ChangeRequest {
 	return nil
 }
 
+type GetResultResponse struct {
+	// Key is in sync with result struct
+	Key    [][]byte       `protobuf:"bytes,1,rep,name=key,proto3" json:"key,omitempty"`
+	Result []*BuildResult `protobuf:"bytes,2,rep,name=result" json:"result,omitempty"`
+}
+
+func (m *GetResultResponse) Reset()         { *m = GetResultResponse{} }
+func (m *GetResultResponse) String() string { return proto1.CompactTextString(m) }
+func (*GetResultResponse) ProtoMessage()    {}
+
+func (m *GetResultResponse) GetResult() []*BuildResult {
+	if m != nil {
+		return m.Result
+	}
+	return nil
+}
+
+type GetResultRequest struct {
+	Project   string `protobuf:"bytes,1,opt,name=project" json:"project,omitempty"`
+	KeyPrefix []byte `protobuf:"bytes,2,opt,name=key_prefix,proto3" json:"key_prefix,omitempty"`
+}
+
+func (m *GetResultRequest) Reset()         { *m = GetResultRequest{} }
+func (m *GetResultRequest) String() string { return proto1.CompactTextString(m) }
+func (*GetResultRequest) ProtoMessage()    {}
+
 func init() {
 }
 
@@ -339,4 +367,61 @@ var _Builder_serviceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
+}
+
+// Client API for Result service
+
+type ResultClient interface {
+	GetResult(ctx context.Context, in *GetResultRequest, opts ...grpc.CallOption) (*GetResultResponse, error)
+}
+
+type resultClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewResultClient(cc *grpc.ClientConn) ResultClient {
+	return &resultClient{cc}
+}
+
+func (c *resultClient) GetResult(ctx context.Context, in *GetResultRequest, opts ...grpc.CallOption) (*GetResultResponse, error) {
+	out := new(GetResultResponse)
+	err := grpc.Invoke(ctx, "/proto.Result/GetResult", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Server API for Result service
+
+type ResultServer interface {
+	GetResult(context.Context, *GetResultRequest) (*GetResultResponse, error)
+}
+
+func RegisterResultServer(s *grpc.Server, srv ResultServer) {
+	s.RegisterService(&_Result_serviceDesc, srv)
+}
+
+func _Result_GetResult_Handler(srv interface{}, ctx context.Context, buf []byte) (proto1.Message, error) {
+	in := new(GetResultRequest)
+	if err := proto1.Unmarshal(buf, in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(ResultServer).GetResult(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+var _Result_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "proto.Result",
+	HandlerType: (*ResultServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetResult",
+			Handler:    _Result_GetResult_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{},
 }

@@ -73,3 +73,18 @@ message BuildResult {
   Status status = 2;
   ChangeRequest change_request = 3;
 }
+
+message GetResultResponse {
+    // Key is in sync with result struct
+    repeated bytes key = 1;
+    repeated BuildResult result = 2;
+}
+
+message GetResultRequest {
+    string project = 1;
+    bytes key_prefix = 2;
+}
+
+service Result {
+    rpc GetResult(GetResultRequest) returns (GetResultResponse) {}
+}

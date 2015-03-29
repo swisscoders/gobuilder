@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/util"
 
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
@@ -247,10 +248,27 @@ type builderImpl struct {
 	store BuildResultStorer
 }
 
+/*
+message GetResultResponse {
+    // Key is in sync with result struct
+    repeated bytes key = 1;
+    repeated BuildResult result = 2;
+}
+
+message GetResultRequest {
+    bytes key_prefix = 1;
+}
+
+service Result {
+    rpc GetResult(GetResultRequest) returns (GetResultResponse) {}
+}
+*/
+
 type BuildResultStorer interface {
-	StoreMeta(meta *pb.MetaResult) (err error)
-	StoreResult(key []byte, res *pb.BuildResult) (err error)
-	ResultKey(builder, slave string, timestamp time.Time) []byte
+	StoreMeta(meta *pb.MetaResult) error
+	StoreResult(key []byte, res *pb.BuildResult) error
+	GetResult(keyPrefix []byte) (*pb.GetResultResponse, error)
+	ResultKey(builder string, slave string, timestamp time.Time) []byte
 }
 
 type ldbResultStorage struct {
@@ -296,6 +314,30 @@ func (self *ldbResultStorage) StoreResult(key []byte, res *pb.BuildResult) (err 
 	}
 
 	return self.db.Put(key, v, nil)
+}
+
+func (self *ldbResultStorage) GetResult(keyPrefix []byte) (*pb.GetResultResponse, error) {
+	res := new(pb.GetResultResponse)
+	it := self.db.NewIterator(util.BytesPrefix(keyPrefix), nil)
+	defer it.Release()
+
+	for it.Next() {
+		// XXX(an): Ugly hack to force golang copy the []byte slice.
+		// The previous solution: res.Key = append(res.Key, it.Key()) didn't copy the key value
+		// therefore we only saved the very last key.
+		// This is one of the feature that sucks in go
+		res.Key = append(res.Key, []byte(fmt.Sprintf("%s", string(it.Key()))))
+
+		br := new(pb.BuildResult)
+		if err := proto.Unmarshal(it.Value(), br); err != nil {
+			return nil, fmt.Errorf("While unmarshaling proto for key record %s: %s", string(it.Key()), err)
+		}
+		res.Result = append(res.Result, br)
+	}
+	if it.Error() != nil {
+		return nil, fmt.Errorf("Iteration over %s prefix failed: %s", string(keyPrefix), it.Error())
+	}
+	return res, nil
 }
 
 func (self *builderImpl) Build(change *pb.ChangeRequest) error {
@@ -393,7 +435,6 @@ func (self *PeriodicScheduler) Schedule(change *pb.ChangeRequest) error {
 	return nil
 }
 
-// FIXME(an): When do we run this function actually?
 func (self *PeriodicScheduler) executionLoop(interval int32) {
 	var latestRequest *pb.ChangeRequest
 	ticker := time.NewTicker(time.Second * time.Duration(interval))
@@ -507,6 +548,22 @@ func findBlueprint(blueprints []*pb.Blueprint, name string) (result *pb.Blueprin
 	return nil
 }
 
+type resultServer struct {
+	DBs map[string]BuildResultStorer
+}
+
+func newResultServer() *resultServer {
+	return &resultServer{DBs: make(map[string]BuildResultStorer)}
+}
+
+func (self *resultServer) GetResult(ctx context.Context, req *pb.GetResultRequest) (*pb.GetResultResponse, error) {
+	db, ok := self.DBs[req.Project]
+	if !ok {
+		return nil, fmt.Errorf("No such project %s", req.Project)
+	}
+	return db.GetResult(req.KeyPrefix)
+}
+
 func setupFromConfigOrDie(conf *pb.GoBuilder, server *grpc.Server, registry *BuildSlaveRegistry, logDir string) (processor *reportProcessor, cleanupClosure func()) {
 	var sourceNotifier *rpcSourceNotifier
 	var schedulerMap = make(SchedulerMap)
@@ -525,8 +582,10 @@ func setupFromConfigOrDie(conf *pb.GoBuilder, server *grpc.Server, registry *Bui
 		registry.Add(s.GetName(), newRpcBuildSlave(s.GetName(), s.GetAddress()))
 	}
 
+	resultSrv := newResultServer()
 	for _, proj := range conf.GetProject() {
 		db := newLdbResultStorage(path.Join(logDir, proj.GetName()))
+		resultSrv.DBs[proj.GetName()] = db
 		cleanupFns = append(cleanupFns, db.Close)
 
 		if sourceNotifier == nil && proto.HasExtension(proj.GetSource(), pb.E_SourceNotifier_Source) {
@@ -583,6 +642,7 @@ func setupFromConfigOrDie(conf *pb.GoBuilder, server *grpc.Server, registry *Bui
 			}
 		}
 	}
+	pb.RegisterResultServer(server, resultSrv)
 
 	return NewReportProcessor(conf, sourceNotifier.Report(), schedulerMap), cleanupCb
 }
