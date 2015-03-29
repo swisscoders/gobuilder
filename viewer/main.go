@@ -11,12 +11,14 @@ import (
 	"./repo"
 	"./usecase"
 	"./web"
+	"./console"
 	"google.golang.org/grpc"
 )
 
 var logsDir = flag.String("build_log_dir", "./../logs", "path to project logs directory")
 var buildConf = flag.String("build_conf", "./../build.conf", "path to build.conf")
 var masterAddress = flag.String("master", "127.0.0.1:3900", "address of master")
+var viewer = flag.String("viewer", "console", "Choose the viewer [web|console]")
 
 func main() {
 	flag.Parse()
@@ -29,7 +31,11 @@ func main() {
 	projectsRepo := repo.ProjectsFromProto(ReadProjectConfigOrDie(*buildConf), *logsDir)
 	buildRepo := repo.NewBuildResultRepo(conn)
 
-	web.StartViewer(projectsRepo, buildRepo, usecase.NewBuildOutputReader(*logsDir))
+	if *viewer == "web" {
+		web.StartViewer(projectsRepo, buildRepo, usecase.NewBuildOutputReader(*logsDir))
+	} else {
+		console.StartViewer(projectsRepo, buildRepo, usecase.NewBuildOutputReader(*logsDir))
+	}
 }
 
 func ReadProjectConfigOrDie(path string) *pb.GoBuilder {
