@@ -21,6 +21,10 @@ message ChangeRequest {
     string branch = 4;
     // List of modified paths within the commit
     repeated string files = 5;
+    // Name of the committer
+    string name = 7;
+    // Email address of the commiter
+    string email = 8;
 }
 
 message ChangeResponse {

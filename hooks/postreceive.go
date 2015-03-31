@@ -53,6 +53,9 @@ git diff --name-only 57d6a4e06956fdc3e23e2684a2fd43e1c0b58445 a74dbfea4d9daf37e3
 git diff --name-only a74dbfea4d9daf37e39b23181d19020538e6f9ba f25367f7692e3a2f3e1abed44597c8ceb3a9e218
 
 and send each commit via RPC with the appropriate fields filled in.
+
+git log -1 4fbade815c9d0e44f745ba317b06ddfd8ee9cc97 --format=%H:%an:%ae:%f
+http://opensource.apple.com/source/Git/Git-19/src/git-htmldocs/pretty-formats.txt
 */
 
 var address = flag.String("address", "localhost:50052", "address of the master")
@@ -70,24 +73,7 @@ func main() {
 		panic(err)
 	}
 
-	var opts []grpc.DialOption
-	if *tls {
-		/*var sn string
-		var creds credentials.TransportAuthenticator
-		if *caFile != "" {
-			var err error
-			creds, err = credentials.NewClientTLSFromFile(*caFile, sn)
-			if err != nil {
-				log.Fatalf("Failed to create TLS credentials %v", err)
-			}
-		} else {
-			creds = credentials.NewClientTLSFromCert(nil, sn)
-		}
-		opts = append(opts, grpc.WithTransportCredentials(creds))*/
-		panic("Does not work anyway - dont use it")
-	}
-
-	conn, err := grpc.Dial(*address, opts...)
+	conn, err := grpc.Dial(*address)
 	if err != nil {
 		glog.Errorf("Cannot dial the master %s: %s", *address, err)
 		return
@@ -158,9 +144,26 @@ func createCommitsFromCommitPairs(refName string, pairs []*git.RevListCommitPair
 		}
 
 		files := strings.Split(strings.TrimSpace(output), "\n")
-		commits = append(commits, &git.Commit{CommitHash: pair.NewCommitHash, Branch: refName, Files: files})
+
+		name, email, err := extractAuthorInfo(pair.NewCommitHash)
+		if err != nil {
+			err = fmt.Errorf("Failed to extract author info: %s", err)
+			return commits, err
+		}
+
+		commits = append(commits, &git.Commit{CommitHash: pair.NewCommitHash, Branch: refName, Files: files, Name: name, Email: email})
 	}
 	return
+}
+
+func extractAuthorInfo(commitHash string) (name string, email string, err error) {
+	output, err := git.Execute("log", "-1", commitHash, "--format=%an:%ae")
+	if err != nil {
+		return "", "", err
+	}
+
+	nameEmail := strings.Split(strings.TrimSpace(output), ":")
+	return nameEmail[0], nameEmail[1], nil
 }
 
 func extractCommitPairs(oldCommitHash, newCommitHash string) (pairs []*git.RevListCommitPair, err error) {
@@ -191,6 +194,8 @@ func createRequestsFromCommits(bareRepoPath string, projectName string, commits 
 			Branch:   commit.Branch,
 			Files:    commit.Files,
 			Repo:     bareRepoPath,
+			Name: 	  commit.Name,
+			Email:    commit.Email,
 		})
 	}
 	return

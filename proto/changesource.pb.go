@@ -61,6 +61,10 @@ type ChangeRequest struct {
 	Branch string `protobuf:"bytes,4,opt,name=branch" json:"branch,omitempty"`
 	// List of modified paths within the commit
 	Files []string `protobuf:"bytes,5,rep,name=files" json:"files,omitempty"`
+	// Name of the committer
+	Name string `protobuf:"bytes,7,opt,name=name" json:"name,omitempty"`
+	// Email address of the commiter
+	Email string `protobuf:"bytes,8,opt,name=email" json:"email,omitempty"`
 }
 
 func (m *ChangeRequest) Reset()         { *m = ChangeRequest{} }
