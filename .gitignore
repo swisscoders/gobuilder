@@ -1,4 +1,1 @@
-web
-logs
-old
-testapp
+*.pb.go
