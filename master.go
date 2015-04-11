@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"net/smtp"
 	"os"
 	"path"
 	"strconv"
@@ -225,6 +226,34 @@ func (self *rpcBuildSlave) Execute(bp *pb.Blueprint, change *pb.ChangeRequest, c
 	return
 }
 
+type Notifier interface {
+	Notify(change *pb.ChangeRequest, result *pb.BuildResult) error
+}
+
+type emailNotifier struct {
+	smtp string
+	from string
+	auth smtp.Auth
+	cc   []string
+}
+
+func (self *emailNotifier) Notify(change *pb.ChangeRequest, result *pb.BuildResult) error {
+	// TODO(rn): Is AuthoEmail []string? (how are merges of multiple commits handled?)
+	/*
+		to := append(self.cc, change.Name)
+		var msg bytes.Buffer
+		if err := t.Execute(msg, struct {
+			Change *pb.ChangeRequest
+			Result *pb.BuildResult
+		}{change, result}); err != nil {
+			return fmt.Errorf("While executing template for message body: %s", err)
+		}
+		if err := SendMail(self.smtp, self.auth, self.from, to, msg.Bytes()); err != nil {
+			return fmt.Errorf("Sending mail via %s to %v: %s", self.smtp, to, err)
+		}*/
+	return nil
+}
+
 type ExecutionContext struct {
 	Stdout   io.WriteCloser
 	Stderr   io.WriteCloser
@@ -245,24 +274,9 @@ type builderImpl struct {
 
 	logDir string
 
-	store BuildResultStorer
+	store    BuildResultStorer
+	notifier Notifier
 }
-
-/*
-message GetResultResponse {
-    // Key is in sync with result struct
-    repeated bytes key = 1;
-    repeated BuildResult result = 2;
-}
-
-message GetResultRequest {
-    bytes key_prefix = 1;
-}
-
-service Result {
-    rpc GetResult(GetResultRequest) returns (GetResultResponse) {}
-}
-*/
 
 type BuildResultStorer interface {
 	StoreMeta(meta *pb.MetaResult) error
@@ -321,12 +335,11 @@ func (self *ldbResultStorage) GetResult(keyPrefix []byte) (*pb.GetResultResponse
 	it := self.db.NewIterator(util.BytesPrefix(keyPrefix), nil)
 	defer it.Release()
 
-	for it.Next() {
-		// XXX(an): Ugly hack to force golang copy the []byte slice.
-		// The previous solution: res.Key = append(res.Key, it.Key()) didn't copy the key value
-		// therefore we only saved the very last key.
-		// This is one of the feature that sucks in go
-		res.Key = append(res.Key, []byte(fmt.Sprintf("%s", string(it.Key()))))
+	it.Last()
+	for it.Prev() {
+		k := make([]byte, len(it.Key()))
+		copy(k, it.Key())
+		res.Key = append(res.Key, k)
 
 		br := new(pb.BuildResult)
 		if err := proto.Unmarshal(it.Value(), br); err != nil {
@@ -392,6 +405,16 @@ func (self *builderImpl) Build(change *pb.ChangeRequest) error {
 				Status:        ctx.Status,
 			}
 			self.store.StoreResult(self.store.ResultKey(self.builder, s.Name(), start), result)
+
+			if self.notifier != nil {
+				if err := self.notifier.Notify(change, result); err != nil {
+					glog.Errorf("Failed to send notification: %s", err)
+					// TODO(rn): Increase error metric
+				}
+			} else {
+
+				glog.Errorf("self.notifier is nil")
+			}
 
 		}(s, self.blueprint)
 	}
