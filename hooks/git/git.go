@@ -16,7 +16,7 @@ type Commit struct {
 	Branch     string
 	Tag        string
 
-	Name string
+	Name  string
 	Email string
 
 	Files []string

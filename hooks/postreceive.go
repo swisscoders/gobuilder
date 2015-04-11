@@ -194,7 +194,7 @@ func createRequestsFromCommits(bareRepoPath string, projectName string, commits 
 			Branch:   commit.Branch,
 			Files:    commit.Files,
 			Repo:     bareRepoPath,
-			Name: 	  commit.Name,
+			Name:     commit.Name,
 			Email:    commit.Email,
 		})
 	}
