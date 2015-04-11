@@ -1,0 +1,68 @@
+@{
+  import (
+    "fmt"
+    "../../viewmodel"
+  )
+  var headers []*viewmodel.HeaderRow
+  var columnBuilderSlave []string
+  var buildSlaveRow [][]string
+  var rows [][]*viewmodel.BuildInfo
+}
+<div class="BuildTable" >
+  <table>
+      <tr>
+          <td class="commit">
+            Commit Hash
+          </td>
+          @for _, header := range headers {
+          @{
+            numHeader := fmt.Sprint(header.NumSlaves)
+          }
+          <td colspan="@raw(numHeader)">
+            @raw(header.Name)
+          </td>
+          <td>
+            Author &amp; Email
+          </td>
+          }
+      </tr>
+      @for _, row := range buildSlaveRow {
+      <tr>
+          <td class="slaves commit"></td>
+          @for _, field := range row {
+            <td class="slaves">@raw(field)</td>
+          }
+          <td class="slaves"></td>
+      </tr>
+      
+    }
+
+      @for _, row := range rows {
+      <tr>
+          @if len(row) > 0 {
+            <td class="commit" data-commit="@raw(row[0].Commit)"><span class="short-commit"><b>@raw(row[0].ShortCommit)</b></span>
+              <span style="display:none;" class="long-commit"><b>@raw(row[0].Commit)</b></span> #@raw(row[0].Branch)</td>
+          }
+          @for _, build := range row {
+            <td class="@raw(build.StatusClass)"><a class="output" href="/project/output/@raw(build.Project)/@raw(build.Builder)/@raw(build.Commit)/@raw(build.Slave)">@raw(build.Status)</a></td>
+          }
+          @if len(row) > 0 {
+            <td class="author"><a href="mailto:@raw(row[0].Email)" style="color: #000;">@raw(row[0].Author) &lt;@raw(row[0].Email)&gt;</a></td>
+          }
+      </tr>
+      @{
+        numRows := fmt.Sprint(len(rows))
+      }
+      <tr style="display:none; text-align:left;" class="files commit-@raw(row[0].Commit)">
+        <td colspan="@raw(numRows)" style="text-align:left;">
+          <b>Files:</b>
+          <ul>
+            @for _, file := range row[0].Files {
+              <li>@raw(file)</li>
+            }
+          </ul>
+        </td>
+      <tr>
+      }
+  </table>
+</div>

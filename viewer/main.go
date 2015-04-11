@@ -8,10 +8,10 @@ import (
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
 
+	"./console"
 	"./repo"
 	"./usecase"
 	"./web"
-	"./console"
 	"google.golang.org/grpc"
 )
 

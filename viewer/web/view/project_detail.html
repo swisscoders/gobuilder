@@ -1,0 +1,152 @@
+[[define "project/detail"]]
+[[template "header" .]]
+<h1 class="page-header">Builds &raquo; [[.Content.Title]]</h1>
+<!-- http://www.csstablegenerator.com/?table_id=3 //-->
+<style>
+.BuildTable {
+  margin:0px;padding:0px;
+  width:100%;
+  box-shadow: 10px 10px 5px #888888;
+  border:1px solid #000f5b;
+  
+  -moz-border-radius-bottomleft:0px;
+  -webkit-border-bottom-left-radius:0px;
+  border-bottom-left-radius:0px;
+  
+  -moz-border-radius-bottomright:0px;
+  -webkit-border-bottom-right-radius:0px;
+  border-bottom-right-radius:0px;
+  
+  -moz-border-radius-topright:0px;
+  -webkit-border-top-right-radius:0px;
+  border-top-right-radius:0px;
+  
+  -moz-border-radius-topleft:0px;
+  -webkit-border-top-left-radius:0px;
+  border-top-left-radius:0px;
+}.BuildTable table{
+    border-collapse: collapse;
+        border-spacing: 0;
+  width:100%;
+  height:100%;
+  margin:0px;padding:0px;
+}.BuildTable tr:last-child td:last-child {
+  -moz-border-radius-bottomright:0px;
+  -webkit-border-bottom-right-radius:0px;
+  border-bottom-right-radius:0px;
+}
+.BuildTable table tr:first-child td:first-child {
+  -moz-border-radius-topleft:0px;
+  -webkit-border-top-left-radius:0px;
+  border-top-left-radius:0px;
+}
+.BuildTable table tr:first-child td:last-child {
+  -moz-border-radius-topright:0px;
+  -webkit-border-top-right-radius:0px;
+  border-top-right-radius:0px;
+}.BuildTable tr:last-child td:first-child{
+  -moz-border-radius-bottomleft:0px;
+  -webkit-border-bottom-left-radius:0px;
+  border-bottom-left-radius:0px;
+}.BuildTable tr:hover td{
+  
+}
+.BuildTable tr:nth-child(odd){ background-color:#aad4ff; }
+.BuildTable tr:nth-child(even)    { background-color:#ffffff; }.BuildTable td{
+  vertical-align:middle;
+  
+  
+  border:1px solid #000f5b;
+  border-width:0px 1px 1px 0px;
+  text-align:left;
+  padding:3px;
+  font-size:12px;
+  font-family:Helvetica;
+  font-weight:normal;
+  color:#000000;
+}.BuildTable tr:last-child td{
+  border-width:0px 1px 0px 0px;
+}.BuildTable tr td:last-child{
+  border-width:0px 0px 1px 0px;
+}.BuildTable tr:last-child td:last-child{
+  border-width:0px 0px 0px 0px;
+}
+.BuildTable tr:first-child td{
+    background:-o-linear-gradient(bottom, #005fbf 5%, #003f7f 100%);  background:-webkit-gradient( linear, left top, left bottom, color-stop(0.05, #005fbf), color-stop(1, #003f7f) );
+  background:-moz-linear-gradient( center top, #005fbf 5%, #003f7f 100% );
+  filter:progid:DXImageTransform.Microsoft.gradient(startColorstr="#005fbf", endColorstr="#003f7f");  background: -o-linear-gradient(top,#005fbf,003f7f);
+
+  background-color:#005fbf;
+  border:0px solid #000f5b;
+  text-align:center;
+  border-width:0px 0px 1px 1px;
+  font-size:15px;
+  font-family:Helvetica;
+  font-weight:bold;
+  color:#ffffff;
+}
+.BuildTable tr:first-child:hover td{
+  background:-o-linear-gradient(bottom, #005fbf 5%, #003f7f 100%);  background:-webkit-gradient( linear, left top, left bottom, color-stop(0.05, #005fbf), color-stop(1, #003f7f) );
+  background:-moz-linear-gradient( center top, #005fbf 5%, #003f7f 100% );
+  filter:progid:DXImageTransform.Microsoft.gradient(startColorstr="#005fbf", endColorstr="#003f7f");  background: -o-linear-gradient(top,#005fbf,003f7f);
+
+  background-color:#005fbf;
+}
+.BuildTable tr:first-child td:first-child{
+  border-width:0px 0px 1px 0px;
+}
+.BuildTable tr:first-child td:last-child{
+  border-width:0px 0px 1px 1px;
+}
+
+.BuildTable td.slaves {
+  background-color:#ccc; 
+  font-weight: bolder;
+  font-size:15px;
+  text-align:center;
+}
+.BuildTable td {
+  text-align:center;
+}
+.BuildTable td.commit {
+  text-align: left;
+}
+.BuildTable td.fail {
+  background-color:red;
+}
+
+.BuildTable td.author {
+  text-align: left;
+  padding-left:5px;
+  font-size:11px;
+}
+
+.BuildTable td a.output {
+  color: #000;
+}
+</style>
+<script>
+$(document).ready(function(){
+  $('.short-commit').click(function() {
+    $('.short-commit').hide();
+    $('.long-commit').show();
+
+    //vvar commit = $(this).closest('td').attr('data-commit')
+    $('.files').show();
+  });
+
+  $('.long-commit').click(function() {
+    $('.long-commit').hide();
+    $('.short-commit').show();
+
+    $('.files').hide();
+  });
+});
+</script>
+
+
+[[.Content.Content]]
+
+          
+[[template "footer"]]
+[[end]]

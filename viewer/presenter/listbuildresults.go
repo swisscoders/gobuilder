@@ -22,17 +22,20 @@ func CreateBuildResultListing(projectName string, buildRepo repo.BuildResultRepo
 		b.Builder = keys[i].Builder()
 		b.Slave = keys[i].Slave()
 		b.Status = "OK"
+		b.StatusClass = "ok"
 		if !repo.IsBuildStatusOK(result) {
 			b.StatusClass = "fail" // css
 			b.Status = "FAIL"
 		}
+		b.Author = result.ChangeRequest.Name
+		b.Email = result.ChangeRequest.Email
 		b.Repo = result.ChangeRequest.Repo
 		b.Branch = result.ChangeRequest.Branch
 		b.Files = result.ChangeRequest.Files
 
 		b.Duration = time.Duration(result.Duration)
 		b.Timestamp = keys[i].Timestamp()
-		builds = append([]*viewmodel.BuildInfo{&b}, builds...)
+		builds = append(builds, &b)
 	}
 	return
 }

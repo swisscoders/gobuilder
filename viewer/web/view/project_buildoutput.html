@@ -1,0 +1,18 @@
+[[define "project/buildoutput"]]
+[[template "header" .]]
+<h1 class="page-header">Build output &raquo; [[.Content.Title]]</h1>
+<h4 style="color:#666;">[[.Content.Subtitle]]</h4>
+
+<a href="javascript:history.back();">Back</a>
+<h3>Stderr</h3>
+<pre class="console">
+[[.Content.Stderr]]
+</pre>
+<a href="javascript:history.back();">Back</a>
+<h3>Stdout</h3>
+<pre class="console">
+[[.Content.Stdout]]
+</pre>
+<a href="javascript:history.back();">Back</a>
+[[template "footer"]]
+[[end]]
