@@ -18,7 +18,6 @@ type buildOutput struct {
 	path string
 }
 
-// b.Project, b.Builder, b.Commit, b.Slave
 func (self *buildOutput) GetOutputStreamContent(project, builder, commit, slave string) (stdout []byte, stderr []byte, err error) {
 	filePath := path.Join(self.path, project, builder, fmt.Sprintf("%s.%s", commit, slave))
 

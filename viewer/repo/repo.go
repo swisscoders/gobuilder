@@ -41,7 +41,7 @@ type buildResultRepo struct {
 	client pb.ResultClient
 }
 
-func NewBuildResultRepo(conn *grpc.ClientConn) BuildResultRepo /* convert to interface */ {
+func NewBuildResultRepo(conn *grpc.ClientConn) BuildResultRepo {
 	return &buildResultRepo{client: pb.NewResultClient(conn)}
 }
 
