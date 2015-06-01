@@ -8,23 +8,27 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"net/mail"
 	"net/smtp"
+	"net/http"
 	"os"
 	"path"
 	"strconv"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
+    "github.com/prometheus/client_golang/prometheus"
 
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-
+    
 	"./exec"
 
 	pb "./proto"
@@ -35,6 +39,69 @@ var config = flag.String("config", "", "Path to the config file")
 var certFile = flag.String("cert_file", "", "Path to the TLS certificate file")
 var keyFile = flag.String("key_file", "", "Path to the TLS key file")
 var logDir = flag.String("build_log_base_dir", "", "Path to log directory")
+var webViewerUrl = flag.String("webviewer", "", "URL of the webviewer (ie. http://mywebviewer:8080)")
+
+var (
+    notificationErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
+        Namespace: "gobuilder",
+        Subsystem: "notification",
+        Name:      "errors",
+        Help:      "Number of failed notifications",
+    },
+    []string{"project", "builder"})
+    
+    notificationTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+        Namespace: "gobuilder",
+        Subsystem: "notification",
+        Name:      "total",
+        Help:      "Number of total notifications handled",
+    },
+    []string{"project", "builder"})
+
+    schedulerErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
+        Namespace: "gobuilder",
+        Subsystem: "scheduler",
+        Name:      "errors",
+        Help:      "Number of scheduler errors",
+    },
+    []string{"project"})
+    
+    schedulerTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+        Namespace: "gobuilder",
+        Subsystem: "scheduler",
+        Name:      "requests",
+        Help:      "Total schedules",
+    },
+    []string{"project"})
+    
+    reportProcessingErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
+        Namespace: "gobuilder",
+        Subsystem: "report", 
+        Name:      "errors",
+        Help:      "Errors while processing reports",
+    },
+    []string{"project"})
+    
+    reportProcessingTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+        Namespace: "gobuilder",
+        Subsystem: "report",
+        Name:      "total",
+        Help:      "Total reports processed",
+    },
+    []string{"project"})
+)
+
+func init() {
+    prometheus.MustRegister(notificationErrors)
+    prometheus.MustRegister(notificationTotal)
+    
+    prometheus.MustRegister(schedulerErrors)
+    prometheus.MustRegister(schedulerTotal)
+    
+    prometheus.MustRegister(reportProcessingErrors)
+    prometheus.MustRegister(reportProcessingTotal)
+}
+
 
 type SourceNotifier interface {
 	Start() error
@@ -128,7 +195,6 @@ type rpcBuildSlave struct {
 	name string
 }
 
-// FIXME(an): Where do we call this function?
 func newRpcBuildSlave(name, address string) *rpcBuildSlave {
 	return &rpcBuildSlave{name: name, address: address}
 }
@@ -227,31 +293,149 @@ func (self *rpcBuildSlave) Execute(bp *pb.Blueprint, change *pb.ChangeRequest, c
 }
 
 type Notifier interface {
-	Notify(change *pb.ChangeRequest, result *pb.BuildResult) error
+	Notify(change *pb.ChangeRequest, results []*pb.BuildResult) error
+}
+
+type nullNotifier struct {
+}
+
+func (self *nullNotifier) Notify(change *pb.ChangeRequest, results []*pb.BuildResult) error {
+	return nil
+}
+
+func NewNullNotifier() *nullNotifier {
+	return &nullNotifier{}
 }
 
 type emailNotifier struct {
 	smtp string
 	from string
 	auth smtp.Auth
-	cc   []string
+	cc   []mail.Address
+
+	webViewerUrl string
 }
 
-func (self *emailNotifier) Notify(change *pb.ChangeRequest, result *pb.BuildResult) error {
+var mailTmpl = template.Must(template.New("mailtmpl").Parse(`Dear {{.Change.Name}}
+
+It appears as if you broke one or more slave in {{.Change.Project}} with {{.Change.Commit}}:
+{{range $result := .Results}}- {{$result.Slave}}
+{{end}}
+More details: {{.URL}}/project/{{.Change.Project}}`))
+
+func (self *emailNotifier) Notify(change *pb.ChangeRequest, results []*pb.BuildResult) error {
 	// TODO(rn): Is AuthoEmail []string? (how are merges of multiple commits handled?)
-	/*
-		to := append(self.cc, change.Name)
-		var msg bytes.Buffer
-		if err := t.Execute(msg, struct {
-			Change *pb.ChangeRequest
-			Result *pb.BuildResult
-		}{change, result}); err != nil {
-			return fmt.Errorf("While executing template for message body: %s", err)
+
+	var AllBuildsSuccessful bool = true
+	for _, result := range results {
+		if result.Status.ExitStatus != 0 || result.Status.CoreDump {
+			AllBuildsSuccessful = false
 		}
-		if err := SendMail(self.smtp, self.auth, self.from, to, msg.Bytes()); err != nil {
-			return fmt.Errorf("Sending mail via %s to %v: %s", self.smtp, to, err)
-		}*/
+	}
+
+	if AllBuildsSuccessful {
+		return nil
+	}
+
+	m := NewEmail(mailTmpl)
+	m.SetTo(mail.Address{Name: change.Name, Address: change.Email})
+
+	m.SetCc(self.cc...)
+	m.SetSubject(fmt.Sprintf("%s: %s broke some builds", change.Project, change.Commit))
+	to := append(self.cc, mail.Address{Name: change.Name, Address: change.Email})
+	msg, err := m.Construct(struct {
+		Change  *pb.ChangeRequest
+		Results []*pb.BuildResult
+		URL     string
+	}{change, results, self.webViewerUrl})
+	if err != nil {
+		return err
+	}
+
+	var tos []string
+	for _, mail := range to {
+		tos = append(tos, mail.Address)
+	}
+
+	if err := smtp.SendMail(self.smtp, self.auth, self.from, tos, msg); err != nil {
+		return fmt.Errorf("Sending mail using %s to %v: %s", self.smtp, to, err)
+	}
 	return nil
+}
+
+type Email struct {
+	header mail.Header
+	tmpl   *template.Template
+}
+
+func NewEmail(t *template.Template) *Email {
+	return &Email{tmpl: t, header: mail.Header{}}
+}
+
+func (self *Email) SetFrom(from mail.Address) {
+	self.header["From"] = []string{from.String()}
+}
+
+func (self *Email) SetTo(to ...mail.Address) {
+	var tos = self.header["To"]
+	for _, t := range to {
+		tos = append(tos, t.String())
+	}
+	self.header["To"] = tos
+}
+
+func (self *Email) SetCc(cc ...mail.Address) {
+	var ccs = self.header["Cc"]
+	for _, c := range cc {
+		ccs = append(ccs, c.String())
+	}
+	self.header["Cc"] = ccs
+}
+
+func mailAddrFromStringSlice(mailAddrs []string) (newMailAddrs []mail.Address) {
+	for _, email := range mailAddrs {
+		newMailAddrs = append(newMailAddrs, mail.Address{Address: email})
+	}
+	return
+}
+
+func (self *Email) SetSubject(subject string) {
+	self.header["Subject"] = []string{subject}
+}
+
+func (self *Email) fillHeaders() {
+	self.addIfNotExist("Date", time.Now().Format(time.RFC822))
+	self.addIfNotExist("Content-Type", `text/plain; charset="utf-8"`)
+	self.addIfNotExist("User-Agent", "GoBuilder")
+	host, err := os.Hostname()
+	if err != nil {
+		host = "unknown"
+	}
+	self.addIfNotExist("Message-ID", fmt.Sprintf("%x.%d@%s", time.Now().UnixNano(), os.Getpid(), host))
+}
+
+func (self *Email) addIfNotExist(name, value string) {
+	if _, ok := self.header[name]; ok {
+		return
+	}
+	self.header[name] = []string{value}
+}
+
+func (self *Email) Construct(data interface{}) ([]byte, error) {
+	var msg bytes.Buffer
+
+	for key, values := range self.header {
+		msg.WriteString(key)
+		msg.WriteString(": ")
+		msg.WriteString(strings.Join(values, ", "))
+		msg.WriteString("\r\n")
+	}
+	msg.WriteString("\r\n")
+
+	if err := mailTmpl.Execute(&msg, data); err != nil {
+		return nil, fmt.Errorf("While executing template for message body: %s", err)
+	}
+	return msg.Bytes(), nil
 }
 
 type ExecutionContext struct {
@@ -336,7 +520,7 @@ func (self *ldbResultStorage) GetResult(keyPrefix []byte) (*pb.GetResultResponse
 	defer it.Release()
 
 	it.Last()
-	for it.Prev() {
+	for {
 		k := make([]byte, len(it.Key()))
 		copy(k, it.Key())
 		res.Key = append(res.Key, k)
@@ -346,6 +530,10 @@ func (self *ldbResultStorage) GetResult(keyPrefix []byte) (*pb.GetResultResponse
 			return nil, fmt.Errorf("While unmarshaling proto for key record %s: %s", string(it.Key()), err)
 		}
 		res.Result = append(res.Result, br)
+
+		if !it.Prev() {
+			break
+		}
 	}
 	if it.Error() != nil {
 		return nil, fmt.Errorf("Iteration over %s prefix failed: %s", string(keyPrefix), it.Error())
@@ -356,6 +544,7 @@ func (self *ldbResultStorage) GetResult(keyPrefix []byte) (*pb.GetResultResponse
 func (self *builderImpl) Build(change *pb.ChangeRequest) error {
 	var wg sync.WaitGroup
 	var errs []error
+	var results []*pb.BuildResult
 
 	builderLogDir := path.Join(self.logDir, self.project, self.builder)
 	if err := os.MkdirAll(builderLogDir, 0750); err != nil {
@@ -366,9 +555,8 @@ func (self *builderImpl) Build(change *pb.ChangeRequest) error {
 		wg.Add(1)
 		go func(s BuildSlave, bp *pb.Blueprint) {
 			defer wg.Done()
-			//lock_start := time.Now()
+			
 			s.Acquire()
-			//lock_wait := time.Since(lock_start)
 			defer s.Release()
 
 			start := time.Now()
@@ -403,22 +591,22 @@ func (self *builderImpl) Build(change *pb.ChangeRequest) error {
 				Duration:      duration.Nanoseconds(),
 				ChangeRequest: change,
 				Status:        ctx.Status,
+				Builder:       self.builder,
+				Slave:         s.Name(),
+				Timestamp:     start.Unix(),
 			}
+			results = append(results, result)
 			self.store.StoreResult(self.store.ResultKey(self.builder, s.Name(), start), result)
-
-			if self.notifier != nil {
-				if err := self.notifier.Notify(change, result); err != nil {
-					glog.Errorf("Failed to send notification: %s", err)
-					// TODO(rn): Increase error metric
-				}
-			} else {
-
-				glog.Errorf("self.notifier is nil")
-			}
 
 		}(s, self.blueprint)
 	}
 	wg.Wait()
+
+	notificationTotal.WithLabelValues(self.project, self.builder).Inc()
+	if err := self.notifier.Notify(change, results); err != nil {
+		glog.Errorf("Failed to send notification: %s", err)
+		notificationErrors.WithLabelValues(self.project, self.builder).Inc()
+	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("Build slave failures: %v", errs)
@@ -528,10 +716,11 @@ func NewReportProcessor(config *pb.GoBuilder, reporter <-chan *pb.ChangeRequest,
 
 func (self *reportProcessor) Process() {
 	for rep := range self.reporter {
+	    reportProcessingTotal.WithLabelValues(rep.Project).Inc()
 		_, ok := self.findProject(rep.Project)
 		if !ok {
 			glog.Error("Received report for unknown project: %s", rep.Project)
-			// TODO(rn): Increment error metric
+			reportProcessingErrors.WithLabelValues(rep.Project).Inc()
 		}
 		glog.Infof("Process report for project %s", rep.Project)
 
@@ -539,9 +728,10 @@ func (self *reportProcessor) Process() {
 			if si.ShouldSchedule(rep) {
 				glog.Infof("Scheduler %d wants to schedule change", i)
 				go func(change *pb.ChangeRequest) {
+				    schedulerTotal.WithLabelValues(rep.Project).Inc()
 					if err := si.Schedule(change); err != nil {
 						glog.Errorf("Failed to schedule on scheduler %d in project %s: %s", i, rep.Project, err)
-						// TODO(rn): Increment error metric
+						schedulerErrors.WithLabelValues(rep.Project).Inc()
 					}
 				}(rep)
 			} else {
@@ -587,7 +777,7 @@ func (self *resultServer) GetResult(ctx context.Context, req *pb.GetResultReques
 	return db.GetResult(req.KeyPrefix)
 }
 
-func setupFromConfigOrDie(conf *pb.GoBuilder, server *grpc.Server, registry *BuildSlaveRegistry, logDir string) (processor *reportProcessor, cleanupClosure func()) {
+func setupFromConfigOrDie(conf *pb.GoBuilder, server *grpc.Server, registry *BuildSlaveRegistry, logDir string, webViewerUrl string) (processor *reportProcessor, cleanupClosure func()) {
 	var sourceNotifier *rpcSourceNotifier
 	var schedulerMap = make(SchedulerMap)
 	var cleanupFns []func()
@@ -640,7 +830,28 @@ func setupFromConfigOrDie(conf *pb.GoBuilder, server *grpc.Server, registry *Bui
 			if blueprint == nil {
 				glog.Fatalf("Blueprint %s referenced in builder %s not found in project %s", b.GetBlueprint(), b.GetName(), proj.GetName())
 			}
-			builder[b.GetName()] = &builderImpl{logDir: logDir, slaves: slaves, blueprint: blueprint, project: proj.GetName(), builder: b.GetName(), store: db}
+
+			var notifier Notifier = NewNullNotifier()
+			switch {
+			case proto.HasExtension(b.GetNotifier(), pb.E_EmailNotifier_Notifier):
+				ext, err := proto.GetExtension(b.GetNotifier(), pb.E_EmailNotifier_Notifier)
+				if err != nil {
+					glog.Fatalf("Failed to load notifier extension (Project=%s): %s", proj.GetName(), err)
+				}
+				emailNotifierProto := ext.(*pb.EmailNotifier)
+				smtpAddress := fmt.Sprintf("%s:%d", emailNotifierProto.GetSmtp().GetAddress(), emailNotifierProto.GetSmtp().GetPort())
+				notifier = &emailNotifier{
+					cc:           mailAddrFromStringSlice(emailNotifierProto.GetSmtp().GetCc()),
+					smtp:         smtpAddress,
+					from:         emailNotifierProto.GetFrom(),
+					auth:         smtp.PlainAuth("", emailNotifierProto.GetSmtp().GetUsername(), emailNotifierProto.GetSmtp().GetPassword(), emailNotifierProto.GetSmtp().GetAddress()),
+					webViewerUrl: webViewerUrl,
+				}
+				glog.V(1).Infof("Notifier smtp (address=%s,from=%s) registered for builder: %s", smtpAddress, emailNotifierProto.GetFrom(), b.GetName())
+			}
+
+			builder[b.GetName()] = &builderImpl{logDir: logDir, slaves: slaves, blueprint: blueprint, project: proj.GetName(), builder: b.GetName(), store: db, notifier: notifier}
+
 		}
 
 		for i, sched := range proj.GetScheduler() {
@@ -656,7 +867,7 @@ func setupFromConfigOrDie(conf *pb.GoBuilder, server *grpc.Server, registry *Bui
 			case proto.HasExtension(sched, pb.E_PeriodicScheduler_Scheduler):
 				ext, err := proto.GetExtension(sched, pb.E_PeriodicScheduler_Scheduler)
 				if err != nil {
-					glog.Fatalf("Failed to load extension (Project=%s): %s", proj.GetName(), err)
+					glog.Fatalf("Failed to load scheduler extension (Project=%s): %s", proj.GetName(), err)
 				}
 
 				schedulerMap[proj.GetName()] = append(schedulerMap[proj.GetName()], NewPeriodicScheduler(builders, ext.(*pb.PeriodicScheduler)))
@@ -689,9 +900,12 @@ func main() {
 		glog.Fatalf("Log directory %s does not exist: %s", *logDir, err)
 	}
 
+    http.Handle("/varz", prometheus.Handler())
+    go http.ListenAndServe(":8080", nil)
+
 	registry := NewBuildSlaveRegistry()
 	rpcServer := grpc.NewServer()
-	processor, cleanupCb := setupFromConfigOrDie(conf, rpcServer, registry, *logDir)
+	processor, cleanupCb := setupFromConfigOrDie(conf, rpcServer, registry, *logDir, *webViewerUrl)
 	defer cleanupCb()
 	go processor.Process()
 

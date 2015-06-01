@@ -64,6 +64,8 @@ message Builder {
     required string name = 1;
     required string blueprint = 2;
     repeated string slave = 3;
+    
+    optional Notifier notifier = 4;
 }
 
 message PeriodicScheduler {
@@ -73,4 +75,25 @@ message PeriodicScheduler {
     
     // interval in seconds
     required int32 interval = 1;
+}
+
+message Notifier {
+    extensions 100 to max;
+}
+
+message EmailNotifier {
+    extend Notifier {
+        optional EmailNotifier notifier = 100;
+    }
+
+    message SMTP {
+        optional string address = 1;
+        optional int32 port = 2;
+        optional string username = 3;
+        optional string password = 4;
+        repeated string cc = 5;
+    }
+
+    optional SMTP smtp = 1;
+    optional string from = 2;
 }

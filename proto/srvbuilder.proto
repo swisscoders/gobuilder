@@ -72,6 +72,10 @@ message BuildResult {
   int64 duration = 1;
   Status status = 2;
   ChangeRequest change_request = 3;
+
+  string builder = 4;
+  string slave = 5;
+  int64 timestamp = 6;
 }
 
 message GetResultResponse {
