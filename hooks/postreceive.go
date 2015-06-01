@@ -1,4 +1,3 @@
-// commit hash, branch ...
 package main
 
 import (
@@ -14,49 +13,7 @@ import (
 	"github.com/golang/glog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	//"google.golang.org/grpc/credentials"
 )
-
-/*
-post commit:
-echo $(git rev-parse HEAD)
-echo $(git rev-parse --symbolic --abbrev-ref HEAD)
-echo $(git diff-index HEAD^1 --name-only)
-
-bare post-receive:
-git diff --name-only 2684f4499fc90bf92382dd0569d22e4300dfb1f2 12ca53c375a030b81c796b12a6c83dfe4ad95782
-bab28f2c50267bbfda0c3ec93d5b1f19cc3a943d 2684f4499fc90bf92382dd0569d22e4300dfb1f2 refs/heads/master
-
-====
-post receive on initial git repo (sample):
-0000000000000000000000000000000000000000 37f4ba53dc295b344333f1060102bcac56f79837 refs/heads/master
-
-=======================
-Push + branch creation:
-3d976f56eb5d8c419c7b7263855fa218a8d93683 43a70237d6d7ed51e920e792dc83f60b0c4eb52e refs/heads/master
-0000000000000000000000000000000000000000 43a70237d6d7ed51e920e792dc83f60b0c4eb52e refs/heads/foobar
-=======
-Push + tags creation:
-b28f2c50267bbfda0c3ec93d5b1f19cc3a943d 2684f4499fc90bf92382dd0569d22e4300dfb1f2 refs/heads/master
-0000000000000000000000000000000000000000 3756c13a37bb8307eafa7a7212b9d5317e49667b refs/tags/v0.100
-0000000000000000000000000000000000000000 c376faf8d6350d265d490b59bc860fb69d0645f6 refs/tags/v0.101
-
-=======
-git rev-list f25367f7692e3a2f3e1abed44597c8ceb3a9e218...
-a74dbfea4d9daf37e39b23181d19020538e6f9ba
-57d6a4e06956fdc3e23e2684a2fd43e1c0b58445
-5065a57740dfc7ca06479aa1f6521763b0793636
-
-then we need to:
-git diff --name-only 5065a57740dfc7ca06479aa1f6521763b0793636 57d6a4e06956fdc3e23e2684a2fd43e1c0b58445
-git diff --name-only 57d6a4e06956fdc3e23e2684a2fd43e1c0b58445 a74dbfea4d9daf37e39b23181d19020538e6f9ba
-git diff --name-only a74dbfea4d9daf37e39b23181d19020538e6f9ba f25367f7692e3a2f3e1abed44597c8ceb3a9e218
-
-and send each commit via RPC with the appropriate fields filled in.
-
-git log -1 4fbade815c9d0e44f745ba317b06ddfd8ee9cc97 --format=%H:%an:%ae:%f
-http://opensource.apple.com/source/Git/Git-19/src/git-htmldocs/pretty-formats.txt
-*/
 
 var address = flag.String("address", "localhost:50052", "address of the master")
 var gitRepoPath = flag.String("repo", "", "full path to the git repository")

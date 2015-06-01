@@ -49,7 +49,7 @@ func (self *PostReceiveLine) RefName() string {
 // Sample: bab28f2c50267bbfda0c3ec93d5b1f19cc3a943d 2684f4499fc90bf92382dd0569d22e4300dfb1f2 refs/heads/master
 func ParsePostReceiveLine(r io.Reader) (lines []*PostReceiveLine) {
 	readEachLine(r, func(line string) {
-		fmt.Println("Got: " + line)
+		// fmt.Println("Got: " + line)
 		item := splitLine(line)
 		if len(item) < 3 {
 			return
@@ -77,12 +77,11 @@ func ParseRevList(latestCommitHash string, r io.Reader) (pairs []*RevListCommitP
 		return
 	}
 
-	previousHash := latestCommitHash //hashes[0]
+	previousHash := latestCommitHash
 	for _, hash := range hashes {
 		pairs = append(pairs, &RevListCommitPair{OldCommitHash: previousHash, NewCommitHash: hash})
 		previousHash = hash
 	}
-	//pairs = append(pairs, &RevListCommitPair{OldCommitHash: previousHash, NewCommitHash: latestCommitHash})
 
 	return
 }
@@ -120,7 +119,6 @@ func (self *PostReceive) Parse(r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Got: " + string(input))
 
 	return nil
 }

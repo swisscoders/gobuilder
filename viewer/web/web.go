@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"sort"
+
 	"github.com/zenazn/goji"
 	"github.com/zenazn/goji/web"
 
@@ -16,7 +17,7 @@ import (
 	"../usecase"
 	"../viewmodel"
 
-	tmpl "./template" /* package name was razor */
+	tmpl "./template"
 )
 
 func StartViewer(projectRepo *repo.Projects, buildRepo repo.BuildResultRepo, buildOutputReader usecase.BuildOutputReader) {
@@ -102,6 +103,7 @@ func (self *webViewer) showProject(c web.C, w http.ResponseWriter, r *http.Reque
 	var buildsByCommit []*CommitBuilds
 
 	sort.Sort(viewmodel.BuildInfoSortByDate(builds))
+	
 	// finding all the builds which belong to a commit
 	for _, b := range builds {
 		if idx := findBuildIndex(buildsByCommit, b.Commit); idx >= 0 {

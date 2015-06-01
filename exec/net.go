@@ -7,12 +7,10 @@ import (
 	"strings"
 
 	pb "../proto"
-	//pbhooks "../hooks/proto"
 	"golang.org/x/net/context"
 )
 
 type RemoteCmd struct {
-	//*pb.ExecutionRequest
 	Args []string
 	Env  []string
 
