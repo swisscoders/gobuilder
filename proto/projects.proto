@@ -1,6 +1,8 @@
-syntax = "proto2";
+syntax = "proto3";
 
 package proto;
+
+import "google/protobuf/any.proto";
 
 message GoBuilder {
     repeated Project project = 1;    
@@ -8,18 +10,18 @@ message GoBuilder {
 }
 
 message Slave {
-    required string name = 1;
-    required string address = 2;
+    string name = 1;
+    string address = 2;
     repeated string tag = 3;
 }
 
 // Describes a project
 message Project {
     // Name of the project (used for display and identification)
-    required string name = 1;
+    string name = 1;
     
     // A source associated with this project (for example: SourceNotifier)
-    required Source source = 2;
+    google.protobuf.Any source = 2;
 
     // Blueprints for this project
     repeated Blueprint blueprint = 3;
@@ -27,14 +29,10 @@ message Project {
     repeated Builder builder = 5;
 }
 
-message Source {
-    extensions 100 to max;
-}
-
 // A blueprint associates build steps with a name
 message Blueprint {
     // Name of the blueprint (needs to be unique within a project)
-    required string name = 1;
+    string name = 1;
     
     // List of steps to execute (in order) for this blueprint
     repeated Step step = 2;
@@ -47,53 +45,37 @@ message Step {
 }
 
 message SourceNotifier {
-    extend Source {
-        optional SourceNotifier source = 100;
-    } 
-    optional string address = 1;
+    string address = 1;
 }
 
 message Scheduler {
     repeated string builder = 1;
-    
-    extensions 100 to max;    
+    google.protobuf.Any scheduler = 2;
 }
 
 // Builder is a control unit to run a blueprint on configured slaves
 message Builder {
-    required string name = 1;
-    required string blueprint = 2;
+    string name = 1;
+    string blueprint = 2;
     repeated string slave = 3;
     
-    optional Notifier notifier = 4;
+    google.protobuf.Any notifier = 4;
 }
 
 message PeriodicScheduler {
-    extend Scheduler {
-        optional PeriodicScheduler scheduler = 100;
-    }
-    
     // interval in seconds
-    required int32 interval = 1;
-}
-
-message Notifier {
-    extensions 100 to max;
+    int32 interval = 1;
 }
 
 message EmailNotifier {
-    extend Notifier {
-        optional EmailNotifier notifier = 100;
-    }
-
     message SMTP {
-        optional string address = 1;
-        optional int32 port = 2;
-        optional string username = 3;
-        optional string password = 4;
+        string address = 1;
+        int32 port = 2;
+        string username = 3;
+        string password = 4;
         repeated string cc = 5;
     }
 
-    optional SMTP smtp = 1;
-    optional string from = 2;
+    SMTP smtp = 1;
+    string from = 2;
 }

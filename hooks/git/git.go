@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os/exec"
 	"strings"
 
@@ -112,15 +111,6 @@ type PostReceive struct {
 	branch        string
 	oldCommitHash string
 	newCommitHash string
-}
-
-func (self *PostReceive) Parse(r io.Reader) error {
-	input, err := ioutil.ReadAll(r)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (self *PostReceive) Revision() (string, error) {
