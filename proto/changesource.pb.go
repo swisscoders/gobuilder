@@ -115,9 +115,9 @@ func RegisterChangeSourceServer(s *grpc.Server, srv ChangeSourceServer) {
 	s.RegisterService(&_ChangeSource_serviceDesc, srv)
 }
 
-func _ChangeSource_Notify_Handler(srv interface{}, ctx context.Context, buf []byte) (proto1.Message, error) {
+func _ChangeSource_Notify_Handler(srv interface{}, ctx context.Context, codec grpc.Codec, buf []byte) (interface{}, error) {
 	in := new(ChangeRequest)
-	if err := proto1.Unmarshal(buf, in); err != nil {
+	if err := codec.Unmarshal(buf, in); err != nil {
 		return nil, err
 	}
 	out, err := srv.(ChangeSourceServer).Notify(ctx, in)
