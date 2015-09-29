@@ -103,7 +103,7 @@ func (self *webViewer) showProject(c web.C, w http.ResponseWriter, r *http.Reque
 	var buildsByCommit []*CommitBuilds
 
 	sort.Sort(viewmodel.BuildInfoSortByDate(builds))
-	
+
 	// finding all the builds which belong to a commit
 	for _, b := range builds {
 		if idx := findBuildIndex(buildsByCommit, b.Commit); idx >= 0 {
@@ -117,7 +117,7 @@ func (self *webViewer) showProject(c web.C, w http.ResponseWriter, r *http.Reque
 	var headers []*viewmodel.HeaderRow
 
 	for _, builder := range project.GetBuilder() {
-		headers = append(headers, &viewmodel.HeaderRow{Name: builder.GetName(), NumSlaves: len(builder.GetSlave())})
+		headers = append(headers, &viewmodel.HeaderRow{Name: builder.Name, NumSlaves: len(builder.Slave)})
 	}
 
 	var columnBuilderSlave []string
@@ -126,8 +126,8 @@ func (self *webViewer) showProject(c web.C, w http.ResponseWriter, r *http.Reque
 
 	var row []string
 	for _, builder := range project.GetBuilder() {
-		for _, slave := range builder.GetSlave() {
-			columnBuilderSlave = append(columnBuilderSlave, builder.GetName()+slave)
+		for _, slave := range builder.Slave {
+			columnBuilderSlave = append(columnBuilderSlave, builder.Name+slave)
 			row = append(row, slave)
 		}
 	}

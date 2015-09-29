@@ -22,7 +22,7 @@ func (self *Projects) Projects() []*pb.Project {
 
 func (self *Projects) FindProject(name string) *pb.Project {
 	for _, proj := range self.conf.GetProject() {
-		if proj.GetName() == name {
+		if proj.Name == name {
 			return proj
 		}
 	}

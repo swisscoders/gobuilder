@@ -61,8 +61,8 @@ func projectShowDetail(projectName string, projectRepo *repo.Projects, buildRepo
 	var headers []string
 	headers = []string{""}
 	for _, builder := range project.GetBuilder() {
-		headers = append(headers, builder.GetName())
-		for i := 0; i < len(builder.GetSlave())-1; i++ {
+		headers = append(headers, builder.Name)
+		for i := 0; i < len(builder.Slave)-1; i++ {
 			headers = append(headers, "")
 		}
 	}
@@ -76,8 +76,8 @@ func projectShowDetail(projectName string, projectRepo *repo.Projects, buildRepo
 	var row []string
 	row = []string{""}
 	for _, builder := range project.GetBuilder() {
-		for _, slave := range builder.GetSlave() {
-			columnBuilderSlave = append(columnBuilderSlave, builder.GetName()+slave)
+		for _, slave := range builder.Slave {
+			columnBuilderSlave = append(columnBuilderSlave, builder.Name+slave)
 			row = append(row, slave)
 		}
 	}

@@ -12,11 +12,11 @@ func CreateProjectListing(projectRepo *repo.Projects, buildRepo repo.BuildResult
 	for _, proj := range projectRepo.Projects() {
 		var project viewmodel.Project
 
-		keys, results, err := buildRepo.Results(proj.GetName())
+		keys, results, err := buildRepo.Results(proj.Name)
 		if err != nil {
-			return nil, fmt.Errorf("Project %s error while fetching build results: %s", proj.GetName(), err)
+			return nil, fmt.Errorf("Project %s error while fetching build results: %s", proj.Name, err)
 		}
-		project.Name = proj.GetName()
+		project.Name = proj.Name
 		project.Status = "Success"
 
 		// Results of the latest commit
